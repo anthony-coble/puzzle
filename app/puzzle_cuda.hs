@@ -1,101 +1,129 @@
-import Data.List
-data Tile a = Tile { north :: Edge a
-                   , east :: Edge a
-                   , south :: Edge a
-                   , west :: Edge a
-                   }
-            deriving (Show, Ord, Eq, Read)
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE FlexibleContexts    #-}
+ 
+import Data.Array.Accelerate as A
+import qualified Data.Array.Accelerate.CUDA as CUDA
+import Prelude as P hiding ((==), (&&), (/=), rem, filter)
 
-data Edge a = Edge { picture :: !a 
-                   , end :: {-# UNPACK #-} !End
-                   }
-            deriving (Show, Ord, Eq, Read)
+type Tile = (Edge, Edge, Edge, Edge)
+type Edge = (Int, Int)
 
-data End = Front | Back
-           deriving (Show, Ord, Eq, Read)
+front = 5 :: Int
+back = 6 :: Int
 
-data Animals = Goat | Coyote | Cougar | Ram
-               deriving (Show, Ord, Eq, Read)
+goat = 1 :: Int
+coyote = 2 :: Int
+cougar = 3 :: Int
+ram = 4 :: Int
 
-items = [ Tile { north = Edge Goat Front
-               , east = Edge Ram Back
-               , south = Edge Cougar Front
-               , west = Edge Coyote Back
-               }
-        , Tile { north = Edge Cougar Back
-               , east = Edge Goat Front
-               , south = Edge Ram Back
-               , west = Edge Ram Front
-               }
-        , Tile { north = Edge Cougar Front
-               , east = Edge Coyote Front
-               , south = Edge Ram Back
-               , west = Edge Goat Back
-               }
-        , Tile { north = Edge Coyote Back
-               , east = Edge Goat Back
-               , south = Edge Ram Front
-               , west = Edge Cougar Front
-               }
-        , Tile { north = Edge Ram Front
-               , east = Edge Goat Front
-               , south = Edge Cougar Back
-               , west = Edge Goat Front
-               }
-        , Tile { north = Edge Cougar Front
-               , east = Edge Coyote Front
-               , south = Edge Ram Front
-               , west = Edge Goat Back
-               }
-        , Tile { north = Edge Coyote Back
-               , east = Edge Coyote Front
-               , south = Edge Ram Back
-               , west = Edge Cougar Back
-               }
-        , Tile { north = Edge Goat Back
-               , east = Edge Ram Back
-               , south = Edge Coyote Back
-               , west = Edge Cougar Front
-               }
-        , Tile { north = Edge Cougar Front
-               , east = Edge Coyote Back
-               , south = Edge Coyote Back
-               , west = Edge Goat Back
-               }
-        ]
+items = ( ( ( goat, front)
+          , ( ram, back)
+          , ( cougar, front)
+          , ( coyote, back)
+          )
+        , ( ( cougar, back)
+          , ( goat, front)
+          , ( ram, back)
+          , ( ram, front)
+          )
+        , ( ( cougar, front)
+          , ( coyote, front)
+          , ( ram, back)
+          , ( goat, back)
+          )
+        , ( ( coyote, back)
+          , ( goat, back)
+          , ( ram, front)
+          , ( cougar, front)
+          )
+        , ( ( ram, front)
+          , ( goat, front)
+          , ( cougar, back)
+          , ( goat, front)
+          )
+        , ( ( cougar, front)
+          , ( coyote, front)
+          , ( ram, front)
+          , ( goat, back)
+          )
+        , ( ( coyote, back)
+          , ( coyote, front)
+          , ( ram, back)
+          , ( cougar, back)
+          )
+        , ( ( goat, back)
+          , ( ram, back)
+          , ( coyote, back)
+          , ( cougar, front)
+          )
+        , ( ( cougar, front)
+          , ( coyote, back)
+          , ( coyote, back)
+          , ( goat, back)
+          )
+        )
 
-valid [ a, b, c
-      , d, e, f
-      , h, i, j
-      ] =  east a `match` west b
-        && east b `match` west c
-        && east d `match` west e
-        && east e `match` west f
-        && east h `match` west i
-        && east i `match` west j
-        && south a `match` north d
-        && south d `match` north h
-        && south b `match` north e
-        && south e `match` north i
-        && south c `match` north f
-        && south f `match` north j
-      where match (Edge pic end) (Edge pic' end') = (pic == pic') && (end /= end')
+valid board =  
+  let ( a, b, c, d, e, f, h, i, j) = unlift board :: (Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile)
+  in east a `match` west b
+      && east b `match` west c
+      && east d `match` west e
+      && east e `match` west f
+      && east h `match` west i
+      && east i `match` west j
+      && south a `match` north d
+      && south d `match` north h
+      && south b `match` north e
+      && south e `match` north i
+      && south c `match` north f
+      && south f `match` north j
+      where match edge edge' = 
+              let (pic, end) = unlift edge :: (Exp Int, Exp Int)
+                  (pic', end') = unlift edge :: (Exp Int, Exp Int)
+              in (pic == pic') && (end /= end')
+            north t = let (n, _, _, _) = unlift t :: (Exp Edge, Exp Edge, Exp Edge, Exp Edge) in n
+            east t = let (_, e, _, _) = unlift t :: (Exp Edge, Exp Edge, Exp Edge, Exp Edge) in e
+            south t = let (_, _, s, _) = unlift t :: (Exp Edge, Exp Edge, Exp Edge, Exp Edge) in s
+            west t = let (_, _, _, w) = unlift t :: (Exp Edge, Exp Edge, Exp Edge, Exp Edge) in w
 
-rotate a = Tile { north = west a
-                , east = north a
-                , south = east a
-                , west = south a
-                }
-
-allRotations = mapM (\a -> [ a
-                           , rotate a
-                           , rotate $ rotate a
-                           , rotate $ rotate $ rotate a
-                           ]
-                    )
+rotate tile =
+  let (a, b, c, d) = unlift tile :: (Exp Edge, Exp Edge, Exp Edge, Exp Edge)
+  in
+  lift (d, a, b, c) :: Exp (Edge, Edge, Edge, Edge)
 
 main = do
- putStrLn "Testing all arrangements"
- print $ filter (valid) 
-       $ concatMap (permutations)
-       $ allRotations items
+  let result = CUDA.run $ allRotations
+  print result
+
+toList (a, b, c, d, e, f, g, h, i) = [a, b, c, d, e, f, g, h, i]
+toTuple [a, b, c, d, e, f, g, h, i] = (a, b, c, d, e, f, g, h, i)
+
+
+allRotations = filter (valid) $ generate (constant $ Z :. (4 P.^9::Int)) rotateIndex
+
+rotateIndex ix = 
+  let (a, b, c, d, e, f, g, h, i) = (unlift $ constant $ items :: (Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile, Exp Tile))
+  in
+  lift
+  ( rot 1 a
+  , rot 2 b
+  , rot 3 c
+  , rot 4 d
+  , rot 5 e
+  , rot 6 f
+  , rot 7 g
+  , rot 8 h
+  , rot 9 i) :: Exp (Tile, Tile, Tile, Tile, Tile, Tile, Tile, Tile, Tile)
+  where index :: Exp Int
+        index = unindex1 ix
+        orientations :: Exp Int
+        orientations = A.constant 4
+        magnitude :: Exp Int -> Exp Int
+        magnitude power = (index `rem` (orientations A.^ power)) `div` (orientations A.^ (power-1))
+        rot :: (Exp Int) -> Exp Tile -> Exp Tile 
+        rot power tile = caseof (magnitude power) 
+                         [ ((==0), tile)
+                         , ((==1), rotate tile)
+                         , ((==2), rotate $ rotate $ tile)
+                         , ((==3), rotate $ rotate $ rotate $ tile)
+                         ] $ tile
