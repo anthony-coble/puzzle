@@ -1,4 +1,6 @@
 import Data.List
+import Control.Parallel.Strategies
+
 data Tile a = Tile { north :: Edge a
                    , east :: Edge a
                    , south :: Edge a
@@ -97,6 +99,8 @@ allRotations = mapM (\a -> [ a
 main = do
  putStrLn "Finding solution"
  print $ take 1
-       $ filter (valid) 
-       $ concatMap (permutations)
+       $ concat
+       $ parMap rseq ( filter (valid) 
+                     . permutations
+                     )
        $ allRotations items

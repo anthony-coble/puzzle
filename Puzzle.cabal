@@ -27,6 +27,15 @@ executable Puzzle
                      , Puzzle
   default-language:    Haskell2010
 
+executable PuzzleParallel
+  hs-source-dirs:      app
+  main-is:             puzzle_parallel.hs
+  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base ==4.8.2.0
+                     , Puzzle
+                     , parallel
+  default-language:    Haskell2010
+
 executable PuzzleCUDA
   hs-source-dirs:      app
   main-is:             puzzle_cuda.hs
